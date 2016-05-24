@@ -1,10 +1,19 @@
 #include <openssl/evp.h>
 #include <string.h>
+#include <pthread.h>
 #include "options.h"
 #include "configure.h"
 #include "bruteforce.h"
 #include "queue.h"
 #include "crack.h"
+
+pthread_mutex_t mutex;
+
+unsigned long int progress = 0;
+
+int progressPos = 1;
+
+char progressBar[] = "[                                                  ]";
 
 void * brute_thread (void * arg)
 {
@@ -17,7 +26,15 @@ void * brute_thread (void * arg)
   unsigned char md_value[EVP_MAX_MD_SIZE];
   unsigned int md_len;
 
+  unsigned long int wordsNum = countWordsNum();
+
   md = EVP_get_digestbyname(typecheck(opt.hash));
+
+  if (opt.verbose == 3)
+  {
+      printf("\r%s", progressBar);
+      fflush(stdout);
+  }
 
   while (1)
   {
@@ -48,12 +65,40 @@ void * brute_thread (void * arg)
                     sprintf(&currentHash[i * 2], "%02x", md_value[i]);
                 }
 
-                if (strcmp(currentHash, opt.hash) == 0)
+                if (test == 0)
                 {
-                    found = 1;
-                    crackedPswd = malloc(strlen(pswd) + 1);
-                    strcpy(crackedPswd, pswd);
-                    break;
+                    if (strcmp(currentHash, opt.hash) == 0)
+                    {
+                        found = 1;
+                        strcpy(progressBar, "[--------------------------------------------------]");
+                        printf("\r%s", progressBar);
+                        crackedPswd = malloc(strlen(pswd) + 1);
+                        strcpy(crackedPswd, pswd);
+                        break;
+                    }
+
+                }
+
+                if (opt.verbose == 3)
+                {
+                    pthread_mutex_lock(&mutex);
+
+                    progress++;
+
+                    if (progress >= wordsNum / 50)
+                    {
+                        if (progressPos <= strlen(progressBar) - 2)
+                        {
+                            progressBar[progressPos] = '-';
+                            progressPos++;
+                        }
+                        progress = 0;
+
+                        printf("\r%s", progressBar);
+                        fflush(stdout);
+
+                    }
+                    pthread_mutex_unlock(&mutex);
                 }
                 pswd_counter = 0;
             }
@@ -93,15 +138,16 @@ void generateWords(struct producer_consumer_queue ** q)
 
         generateTwo(&buffer, stride, bufLen, len);
 
+        enqueue(buffer, *q);
+
         if (len == 2)
         {
-            enqueue(buffer, *q);
             continue;
         }
 
-        for (i = 0; i < len; i++)
+        for (int k = 0; k < len; k++)
         {
-            letters[i] = 0;
+            letters[k] = 0;
         }
 
         i = len-3;
@@ -109,10 +155,10 @@ void generateWords(struct producer_consumer_queue ** q)
         do {
             generateLong(i, &buffer, letters, stride, bufLen);
 
-            enqueue(buffer, *q);
-
             if (letters[i] != 0)
             {
+                enqueue(buffer, *q);
+
                 i = len - 3;
                 continue;
             }
@@ -122,6 +168,7 @@ void generateWords(struct producer_consumer_queue ** q)
             if (i < 0) break;
 
         } while(!found);
+
     }
     free(buffer);
     return;
@@ -164,8 +211,7 @@ void generateTwo(char ** buffer, int stride, int bufLen, int len)
     }
 }
 
-void generateLong(int i, char ** buffer, int letters[],
-                  int stride, int bufLen)
+void generateLong(int i, char ** buffer, int letters[], int stride, int bufLen)
 {
     char c;
     int  j;
@@ -184,3 +230,16 @@ void generateLong(int i, char ** buffer, int letters[],
         (*buffer)[j] = c;
     }
 }
+
+unsigned long int countWordsNum()
+{
+    unsigned long int sum = 0;
+    int alphalen = strlen(conf.alphabet);
+
+    for (int i = 1; i <= opt.bruteMaxLen; i++)
+    {
+        sum += pow(alphalen, i);
+    }
+    return sum;
+}
+

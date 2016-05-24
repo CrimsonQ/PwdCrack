@@ -8,6 +8,8 @@
 #include "queue.h"
 #include "crack.h"
 
+int test = 0;
+
 void doHash(EVP_MD_CTX ** mdctx, const EVP_MD * md, unsigned int * md_len,
             unsigned char ** md_value, const char * pswd)
 {
@@ -20,17 +22,12 @@ void doHash(EVP_MD_CTX ** mdctx, const EVP_MD * md, unsigned int * md_len,
 
 void dictionaryAttack(pthread_t * threads, int ncores)
 {
-    //printVerbose(opt.verbose, "crack: Dictionary attack started\n");
-
     for (int j = 0; j < opt.dictCounter; j++)
     {
-        //printVerbose(opt.verbose, "crack: Processing dictionary \"%s\"...\n", opt.dictionaries[j]);
+        //int size = strlen(conf.dictionaryPath) + strlen(opt.dictionaries[j]) + 2;
+        //char buf[size];
+        //snprintf(buf, sizeof buf, "%s%s%s", conf.dictionaryPath, "/", opt.dictionaries[j]);
 
-        int size = strlen(conf.dictionaryPath) + strlen(opt.dictionaries[j]) + 2;
-
-        char buf[size];
-        snprintf(buf, sizeof buf, "%s%s%s", conf.dictionaryPath, "/", opt.dictionaries[j]);
-    \
         FILE * p1_file = fopen(opt.dictionaries[j], "r");
 
         unsigned long int partFile = getFileSize(p1_file) / ncores;
@@ -63,8 +60,6 @@ void dictionaryAttack(pthread_t * threads, int ncores)
 
 void bruteforceAttack(pthread_t * threads, int ncores)
 {
-    //printVerbose(opt.verbose, "crack: Bruteforce attack started\n");
-
     struct producer_consumer_queue * q = producer_consumer_queue_create();
 
     for (int i = 0; i < ncores; i++)
@@ -83,11 +78,15 @@ void bruteforceAttack(pthread_t * threads, int ncores)
 
 }
 
-void measureRuntime(pthread_t * threads, int ncores)
+void measureBruteRuntime(pthread_t * threads, int ncores)
 {
     int len = opt.bruteMaxLen;
+    int verbosity = opt.verbose;
 
     opt.bruteMaxLen = conf.testIterationsNumber;
+    opt.verbose = 0;
+
+    test = 1;
 
     struct timespec startTimer, finishTimer;
     long double elapsed;
@@ -103,98 +102,103 @@ void measureRuntime(pthread_t * threads, int ncores)
 
     double count = pow(strlen(conf.alphabet), conf.testIterationsNumber);
     double speed = count /  elapsed;
-
     double runtime = pow(strlen(conf.alphabet), len) / speed;
 
-    if (runtime < 1)
-    {
-        printf("Approximate runtime: %.02f sec\n", runtime);
-    }
+    printf("Cracking may take up to ");
+    printConvertedTime(runtime);
 
-    if (runtime > 1 && runtime < 60)
-    {
-        printf("Approximate runtime: %.0f sec\n", runtime);
-    }
-
-    if (runtime > 59 && runtime < 3600)
-    {
-       printf("Approximate runtime: %.1f min\n", runtime / 60);
-    }
-
-    if (runtime > 3599 && runtime < 86400)
-    {
-        printf("Approximate runtime: %.2f hour(s)\n", runtime / 3600);
-    }
-
-    if (runtime > 86399 && runtime < 604800)
-    {
-        printf("Approximate runtime: %.0f day(s)\n", runtime / 86400);
-    }
+    test = 0;
 
     opt.bruteMaxLen = len;
+    opt.verbose = verbosity;
+    progress = 0;
 }
 
-double convertTime(double seconds)
+void measureDictRuntime(pthread_t * threads, int ncores)
 {
+    char dictionary[strlen(opt.dictionaries[0])];
+    strcpy(dictionary, opt.dictionaries[0]);
+    int counter = opt.dictCounter;
+    int verbosity = opt.verbose;
 
-}
+    strcpy(opt.dictionaries[0], "test_dictionary.txt");
+    opt.dictCounter = 1;
+    opt.verbose = 0;
 
-/*void crack(pthread_t * threads, int ncores)
-{
-    if (opt.dictionaryMode)
-    {
-        int size = strlen(conf.dictionaryPath) + strlen(opt.dictionaries[0]) + 2;
+    test = 1;
 
-        char buf[size];
-        snprintf(buf, sizeof buf, "%s%s%s", conf.dictionaryPath, "/", opt.dictionaries[0]);
+    FILE * pfile = fopen(opt.dictionaries[0], "r");
+
+    unsigned long int size = getFileSize(pfile);
+
+    struct timespec startTimer, finishTimer;
+    long double elapsed;
+
+    clock_gettime(CLOCK_REALTIME, &startTimer);
+
+    dictionaryAttack(threads, ncores);
+
+    clock_gettime(CLOCK_REALTIME, &finishTimer);
+
+    elapsed = (finishTimer.tv_sec - startTimer.tv_sec);
+    elapsed += (finishTimer.tv_nsec - startTimer.tv_nsec) / 1000000000.0;
+
+    fclose(pfile);
 \
-        FILE * p1_file = fopen(opt.dictionaries[0], "r");
+    double speed = size /  elapsed;
 
-        long int partFile = getFileSize(p1_file) / ncores;
-
-        FILE * fileArr[ncores];
-        long int partBounds[ncores];
-        dictionaryThreadArg args[ncores];
-
-        fileArr[0] = p1_file;
-
-        determineBounds(fileArr, partBounds, ncores, partFile);
-
-        for (int i = 0; i < ncores; i++){
-            args[i].file = fileArr[i];
-            args[i].bound = partBounds[i];
-        }
-
-        for (int i = 0; i < ncores; i++){
-            pthread_create(&threads[i], NULL, dictionary_thread, (void*)&args[i]);
-        }
-    }
-
-    for (int i = 0; i < ncores; i++)
+    if(chdir(conf.dictionaryPath) != 0)
     {
-       pthread_join(threads[i], NULL);
+       printf("Unable to open directory %s\n", conf.dictionaryPath);
     }
 
-    if (opt.bruteMode && found == 0)
+    pfile = fopen(dictionary, "r");
+
+    size = getFileSize(pfile);
+
+    double runtime = size / speed;
+
+    printf("Cracking may take up to ");
+    printConvertedTime(runtime);
+
+    test = 0;
+    strcpy(opt.dictionaries[0] , dictionary);
+    opt.dictCounter = counter;
+    opt.verbose = verbosity;
+    progress = 0;
+}
+
+void printConvertedTime(double seconds)
+{
+    if (seconds < 1)
     {
-        printf("starting brute mode...\n");
-
-        // создадим очередь:
-        struct producer_consumer_queue * q = producer_consumer_queue_create();
-
-        for (int i = 0; i < ncores; i++)
-        {
-            pthread_create(&threads[i], 0, brute_thread, (void *)q);
-        }
-
-        generateWords(&q);
-
-        producer_consumer_queue_stop(q);
-
-        for (int i = 0; i < ncores; i++)
-        {
-           pthread_join(threads[i], NULL);
-        }
-        //puts("Fin2");
+        printf("%.02f sec\n", seconds);
     }
-}*/
+
+    if (seconds > 1 && seconds < 60)
+    {
+        printf("%.0f sec\n", seconds);
+    }
+
+    if (seconds > 59 && seconds < 3600)
+    {
+       printf("%.1f min\n", seconds / 60);
+    }
+
+    if (seconds > 3599 && seconds < 86400)
+    {
+        printf("%.2f hour(s)\n", seconds / 3600);
+    }
+
+    if (seconds > 86399 && seconds < 604800)
+    {
+        printf("%.0f day(s)\n", seconds / 86400);
+    }
+
+    if (seconds > 604799)
+    {
+        printf("%.0f weeks(s)\n", seconds / 604800);
+    }
+
+}
+

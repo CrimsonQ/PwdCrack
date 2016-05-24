@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
     getOptions(argc, argv);
 
     int ncores = 1;
-    getNumCores(&ncores);
+    //getNumCores(&ncores);
 
     OpenSSL_add_all_digests();
 
@@ -40,11 +40,16 @@ int main(int argc, char *argv[])
 
     if (opt.verbose == 2 || opt.verbose == 3)
     {
-        measureRuntime(threads, ncores);
+        measureDictRuntime(threads, ncores);
     }
 
     struct timespec startTimer, finishTimer;
     double elapsed;
+
+    if(chdir(conf.dictionaryPath) != 0)
+    {
+       printf("Unable to open directory %s\n", conf.dictionaryPath);
+    }
 
     clock_gettime(CLOCK_REALTIME, &startTimer);
 
@@ -59,6 +64,8 @@ int main(int argc, char *argv[])
     }
 
     clock_gettime(CLOCK_REALTIME, &finishTimer);
+
+    puts("");
 
     if (opt.verbose == 0)
     {
@@ -76,11 +83,12 @@ int main(int argc, char *argv[])
             printf("Nothing found\n");
         }
 
-        if (opt.verbose == 2)
+        if (opt.verbose == 2 || opt.verbose == 3)
         {
             elapsed = (finishTimer.tv_sec - startTimer.tv_sec);
             elapsed += (finishTimer.tv_nsec - startTimer.tv_nsec) / 1000000000.0;
-            printf("Elapsed time: %f\n", elapsed);
+            printf("Elapsed time: ");
+            printConvertedTime(elapsed);
         }
 
     }

@@ -18,4 +18,6 @@ void generateTwo(char ** buffer, int stride, int bufLen, int len);
 
 void generateLong(int i, char ** buffer, int letters[], int stride, int bufLen);
 
+unsigned long int countWordsNum();
+
 #endif // BRUTEFORCE_H

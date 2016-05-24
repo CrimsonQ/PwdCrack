@@ -119,7 +119,7 @@ void getHashStdin()
 
     while (scanf("%s", buf) == 1)
     {
-        if (strcpy(typecheck(buf),"UNKNOWN") == 0)
+        if (strcmp(typecheck(buf),"UNKNOWN") == 0)
         {
             fprintf(stderr, "Unknown type of hash: %s. Input again:\n", buf);
         }

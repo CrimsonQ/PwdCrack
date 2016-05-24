@@ -12,7 +12,7 @@ typedef struct
 
 void * dictionary_thread(void * arg);
 
-int getFileSize(FILE * file);
+unsigned long getFileSize(FILE * file);
 
 void determineBounds(FILE * fileArr[], int i, long int * partBounds, int ncores, unsigned long partFile);
 
